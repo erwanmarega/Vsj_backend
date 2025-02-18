@@ -3,21 +3,19 @@
 namespace App\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
 
 #[ORM\Entity]
-#[ORM\Table(name: "coach")]
+#[ORM\Table(name: "`coach`")]
 class Coach implements UserInterface, PasswordAuthenticatedUserInterface
 {
     #[ORM\Id]
-    #[ORM\GeneratedValue]
-    #[ORM\Column(name: "id_coach", type: "integer")]
-    private ?int $id = null;
-
-    #[ORM\ManyToOne(targetEntity: Groups::class)]
-    #[ORM\JoinColumn(name: "groups_id", referencedColumnName: "groups_id", nullable: true, onDelete: "SET NULL")]
-    private ?Groups $group = null;
+#[ORM\GeneratedValue]
+#[ORM\Column(name: "id_coach", type: "integer")]
+private ?int $id = null;
 
     #[ORM\Column(name: "nom_coach", type: "string", length: 255)]
     private ?string $nom = null;
@@ -37,20 +35,21 @@ class Coach implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(name: "roles", type: "json")]
     private array $roles = [];
 
+    #[ORM\ManyToMany(targetEntity: Groups::class, inversedBy: "coaches")]
+    #[ORM\JoinTable(name: "coach_groups",
+        joinColumns: [new ORM\JoinColumn(name: "id_coach", referencedColumnName: "id_coach")],
+        inverseJoinColumns: [new ORM\JoinColumn(name: "groups_id", referencedColumnName: "groups_id")]
+    )]
+    private Collection $groups;
+
+    public function __construct()
+    {
+        $this->groups = new ArrayCollection();
+    }
+
     public function getId(): ?int
     {
         return $this->id;
-    }
-
-    public function getGroup(): ?Groups
-    {
-        return $this->group;
-    }
-
-    public function setGroup(?Groups $group): self
-    {
-        $this->group = $group;
-        return $this;
     }
 
     public function getNom(): ?string
@@ -126,5 +125,27 @@ class Coach implements UserInterface, PasswordAuthenticatedUserInterface
     public function getUserIdentifier(): string
     {
         return $this->email;
+    }
+
+    public function getGroups(): Collection
+    {
+        return $this->groups;
+    }
+
+    public function addGroup(Groups $group): self
+    {
+        if (!$this->groups->contains($group)) {
+            $this->groups->add($group);
+            $group->addCoach($this);
+        }
+        return $this;
+    }
+
+    public function removeGroup(Groups $group): self
+    {
+        if ($this->groups->removeElement($group)) {
+            $group->removeCoach($this);
+        }
+        return $this;
     }
 }

@@ -3,6 +3,8 @@
 namespace App\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 
 #[ORM\Entity]
 #[ORM\Table(name: "`groups`")]
@@ -25,10 +27,14 @@ class Groups
     #[ORM\Column(type: "datetime", nullable: true, options: ["default" => "CURRENT_TIMESTAMP"])]
     private ?\DateTimeInterface $updatedAt = null;
 
+    #[ORM\ManyToMany(targetEntity: Coach::class, mappedBy: "groups")]
+    private Collection $coaches;
+
     public function __construct()
     {
         $this->createdAt = new \DateTime();
         $this->updatedAt = new \DateTime();
+        $this->coaches = new ArrayCollection();
     }
 
     public function getId(): ?int
@@ -71,6 +77,29 @@ class Groups
     public function setUpdatedAt(\DateTimeInterface $updatedAt): self
     {
         $this->updatedAt = $updatedAt;
+        return $this;
+    }
+
+    /** @return Collection<int, Coach> */
+    public function getCoaches(): Collection
+    {
+        return $this->coaches;
+    }
+
+    public function addCoach(Coach $coach): self
+    {
+        if (!$this->coaches->contains($coach)) {
+            $this->coaches->add($coach);
+            $coach->addGroup($this);
+        }
+        return $this;
+    }
+
+    public function removeCoach(Coach $coach): self
+    {
+        if ($this->coaches->removeElement($coach)) {
+            $coach->removeGroup($this);
+        }
         return $this;
     }
 }

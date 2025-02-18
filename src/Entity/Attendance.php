@@ -80,6 +80,7 @@ class Attendance
     public function setAttendance(bool $isAttendance): self
     {
         $this->isAttendance = $isAttendance;
+        $this->historic = $isAttendance ? "Présent" : "Absent"; 
         return $this;
     }
 }

@@ -13,6 +13,9 @@ use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use App\Entity\Groups;
+use App\Entity\Attendance;
+use App\Entity\Training;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 
 class SwimmerController extends AbstractController
@@ -228,5 +231,74 @@ class SwimmerController extends AbstractController
             'discipline' => $group->getDiscipline(),
         ], Response::HTTP_OK);
     }
-    
+
+    #[Route('/swimmer/attendance', name: 'swimmer_attendance', methods: ['POST'])]
+    #[IsGranted('ROLE_USER')]
+    public function markAttendance(Request $request, EntityManagerInterface $entityManager): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+
+        if (!isset($data['trainingId'], $data['isAttendance'])) {
+            return $this->json(['error' => 'Données incomplètes'], Response::HTTP_BAD_REQUEST);
+        }
+
+        /** @var Swimmer $swimmer */
+        $swimmer = $this->getUser();
+
+        $training = $entityManager->getRepository(Training::class)->find($data['trainingId']);
+        if (!$training) {
+            return $this->json(['error' => 'Entraînement non trouvé'], Response::HTTP_NOT_FOUND);
+        }
+
+        $existingAttendance = $entityManager->getRepository(Attendance::class)->findOneBy([
+            'swimmer' => $swimmer,
+            'training' => $training
+        ]);
+
+        if ($existingAttendance) {
+            $existingAttendance->setAttendance($data['isAttendance']);
+        } else {
+            $attendance = new Attendance();
+            $attendance->setSwimmer($swimmer);
+            $attendance->setTraining($training);
+            $attendance->setAttendance($data['isAttendance']);
+
+            $entityManager->persist($attendance);
+        }
+
+        $entityManager->flush();
+
+        return $this->json([
+            'message' => 'Présence mise à jour avec succès',
+            'training' => [
+                'id' => $training->getId(),
+                'title' => $training->getTitle()
+            ],
+            'attendance' => $data['isAttendance'] ? "Présent" : "Absent"
+        ], Response::HTTP_OK);
+    }
+
+    #[Route('/swimmer/attendances', name: 'get_swimmer_attendances', methods: ['GET'])]
+#[IsGranted('ROLE_USER')]
+public function getSwimmerAttendances(EntityManagerInterface $entityManager): JsonResponse
+{
+    /** @var Swimmer $swimmer */
+    $swimmer = $this->getUser();
+    $attendances = $entityManager->getRepository(Attendance::class)->findBy(['swimmer' => $swimmer]);
+
+    if (!$attendances) {
+        return $this->json(['message' => 'Aucune présence enregistrée'], Response::HTTP_NOT_FOUND);
+    }
+
+    $data = [];
+    foreach ($attendances as $attendance) {
+        $data[] = [
+            'trainingId' => $attendance->getTraining()->getId(),
+            'trainingTitle' => $attendance->getTraining()->getTitle(),
+            'isAttendance' => $attendance->isAttendance() ? "Présent" : "Absent"
+        ];
+    }
+
+    return $this->json($data, Response::HTTP_OK);
+}
 }

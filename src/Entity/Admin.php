@@ -3,40 +3,29 @@
 namespace App\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Security\Core\User\UserInterface;
+use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 
 #[ORM\Entity]
 #[ORM\Table(name: "admin")]
-class Admin
+class Admin implements UserInterface, PasswordAuthenticatedUserInterface
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column(name: "id_admin", type: "integer")]
     private ?int $id = null;
 
-    #[ORM\ManyToOne(targetEntity: Groups::class)]
-    #[ORM\JoinColumn(name: "groups_id", referencedColumnName: "groups_id", nullable: true, onDelete: "SET NULL")]
-    private ?Groups $group = null;
+    #[ORM\Column(name: "nom_admin", type: "string", length: 255)]
+    private ?string $nom = null;
 
-    #[ORM\Column(name: "title_admin", type: "string", length: 255)]
-    private ?string $title = null;
+    #[ORM\Column(name: "prenom_admin", type: "string", length: 255)]
+    private ?string $prenom = null;
 
-    #[ORM\Column(name: "start_date", type: "datetime")]
-    private ?\DateTimeInterface $startDate = null;
+    #[ORM\Column(name: "email_admin", type: "string", length: 255, unique: true)]
+    private ?string $email = null;
 
-    #[ORM\Column(name: "duration", type: "integer")]
-    private ?int $duration = null;
-
-    #[ORM\Column(name: "intensity", type: "string", length: 255)]
-    private ?string $intensity = null;
-
-    #[ORM\Column(name: "category", type: "string", length: 255)]
-    private ?string $category = null;
-
-    #[ORM\Column(name: "description", type: "text", nullable: true)]
-    private ?string $description = null;
-
-    #[ORM\Column(name: "is_defined", type: "boolean")]
-    private bool $isDefined = false;
+    #[ORM\Column(name: "password_admin", type: "string")]
+    private ?string $password = null;
 
     #[ORM\Column(name: "roles", type: "json")]
     private array $roles = [];
@@ -46,91 +35,47 @@ class Admin
         return $this->id;
     }
 
-    public function getGroup(): ?Groups
+    public function getNom(): ?string
     {
-        return $this->group;
+        return $this->nom;
     }
 
-    public function setGroup(?Groups $group): self
+    public function setNom(string $nom): self
     {
-        $this->group = $group;
+        $this->nom = $nom;
         return $this;
     }
 
-    public function getTitle(): ?string
+    public function getPrenom(): ?string
     {
-        return $this->title;
+        return $this->prenom;
     }
 
-    public function setTitle(string $title): self
+    public function setPrenom(string $prenom): self
     {
-        $this->title = $title;
+        $this->prenom = $prenom;
         return $this;
     }
 
-    public function getStartDate(): ?\DateTimeInterface
+    public function getEmail(): ?string
     {
-        return $this->startDate;
+        return $this->email;
     }
 
-    public function setStartDate(\DateTimeInterface $startDate): self
+    public function setEmail(string $email): self
     {
-        $this->startDate = $startDate;
+        $this->email = $email;
         return $this;
     }
 
-    public function getDuration(): ?int
+    public function getPassword(): ?string
     {
-        return $this->duration;
+        return $this->password;
     }
 
-    public function setDuration(int $duration): self
+    public function setPassword(string $password): self
     {
-        $this->duration = $duration;
-        return $this;
-    }
-
-    public function getIntensity(): ?string
-    {
-        return $this->intensity;
-    }
-
-    public function setIntensity(string $intensity): self
-    {
-        $this->intensity = $intensity;
-        return $this;
-    }
-
-    public function getCategory(): ?string
-    {
-        return $this->category;
-    }
-
-    public function setCategory(string $category): self
-    {
-        $this->category = $category;
-        return $this;
-    }
-
-    public function getDescription(): ?string
-    {
-        return $this->description;
-    }
-
-    public function setDescription(?string $description): self
-    {
-        $this->description = $description;
-        return $this;
-    }
-
-    public function isIsDefined(): bool
-    {
-        return $this->isDefined;
-    }
-
-    public function setIsDefined(bool $isDefined): self
-    {
-        $this->isDefined = $isDefined;
+        $this->password = $password;
         return $this;
     }
 
@@ -143,5 +88,14 @@ class Admin
     {
         $this->roles = $roles;
         return $this;
+    }
+
+    public function eraseCredentials(): void
+    {
+    }
+
+    public function getUserIdentifier(): string
+    {
+        return $this->email;
     }
 }

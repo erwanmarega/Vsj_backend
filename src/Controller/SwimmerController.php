@@ -11,6 +11,9 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use App\Entity\Groups;
+
 
 class SwimmerController extends AbstractController
 {
@@ -158,4 +161,72 @@ class SwimmerController extends AbstractController
             'message' => 'Mot de passe modifié avec succès',
         ], Response::HTTP_OK);
     }
+
+    #[Route('/swimmer/assign-group', name: 'assign_swimmer_group', methods: ['POST'])]
+    public function assignSwimmerToGroup(Request $request, EntityManagerInterface $entityManager): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+    
+        if (!isset($data['swimmer_id'], $data['discipline'])) {
+            return $this->json(['error' => 'ID du nageur et discipline requis'], Response::HTTP_BAD_REQUEST);
+        }
+    
+        $swimmer = $entityManager->getRepository(Swimmer::class)->find($data['swimmer_id']);
+    
+        if (!$swimmer) {
+            return $this->json(['error' => 'Nageur non trouvé'], Response::HTTP_NOT_FOUND);
+        }
+    
+        if (!$swimmer->getDateNaissance()) {
+            return $this->json(['error' => 'Le nageur n\'a pas de date de naissance'], Response::HTTP_BAD_REQUEST);
+        }
+    
+        $now = new \DateTime();
+        $age = $now->diff($swimmer->getDateNaissance())->y;
+        
+        $selectedDiscipline = $data['discipline'];
+    
+        if (($selectedDiscipline === 'Aquabike' || $selectedDiscipline === 'Aquagym') && $age < 18) {
+            return $this->json([
+                'error' => 'Vous devez avoir au moins 18 ans pour choisir cette discipline'
+            ], Response::HTTP_FORBIDDEN);
+        }
+    
+        $groupRepository = $entityManager->getRepository(Groups::class);
+        $group = null;
+    
+        if ($selectedDiscipline === 'Natation') {
+            if ($age <= 3) {
+                $group = $groupRepository->findOneBy(['name' => 'Bébé nageur (3 mois - 3 ans)', 'discipline' => 'Natation']);
+            } elseif ($age <= 4) {
+                $group = $groupRepository->findOneBy(['name' => 'Jardin aquatique (3 ans - 4 ans)', 'discipline' => 'Natation']);
+            } elseif ($age <= 10) {
+                $group = $groupRepository->findOneBy(['name' => 'Enfants (5 ans - 10 ans)', 'discipline' => 'Natation']);
+            } elseif ($age <= 17) {
+                $group = $groupRepository->findOneBy(['name' => 'Adolescents (11 - 17 ans)', 'discipline' => 'Natation']);
+            } else {
+                $group = $groupRepository->findOneBy(['name' => 'Adultes (Nageurs confirmés)', 'discipline' => 'Natation']);
+            }
+        } elseif ($selectedDiscipline === 'Aquabike') {
+            $group = $groupRepository->findOneBy(['name' => 'Aquabike (Adultes uniquement)', 'discipline' => 'Aquabike']);
+        } elseif ($selectedDiscipline === 'Aquagym') {
+            $group = $groupRepository->findOneBy(['name' => 'Aquagym (Adultes uniquement)', 'discipline' => 'Aquagym']);
+        }
+    
+        if (!$group) {
+            return $this->json(['error' => 'Aucun groupe trouvé pour cette discipline'], Response::HTTP_NOT_FOUND);
+        }
+    
+        $swimmer->setGroup($group);
+        $entityManager->persist($swimmer);
+        $entityManager->flush();
+    
+        return $this->json([
+            'message' => 'Nageur assigné au groupe avec succès',
+            'swimmer_id' => $swimmer->getId(),
+            'group' => $group->getName(),
+            'discipline' => $group->getDiscipline(),
+        ], Response::HTTP_OK);
+    }
+    
 }

@@ -5,7 +5,7 @@ namespace App\Entity;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]
-#[ORM\Table(name: "groups")]
+#[ORM\Table(name: "`groups`")]
 class Groups
 {
     #[ORM\Id]
@@ -15,6 +15,9 @@ class Groups
 
     #[ORM\Column(type: "string", length: 255)]
     private ?string $name = null;
+
+    #[ORM\Column(type: "string", length: 255)]
+    private ?string $discipline = null;
 
     #[ORM\Column(type: "datetime", options: ["default" => "CURRENT_TIMESTAMP"])]
     private ?\DateTimeInterface $createdAt = null;
@@ -41,6 +44,17 @@ class Groups
     public function setName(string $name): self
     {
         $this->name = $name;
+        return $this;
+    }
+
+    public function getDiscipline(): ?string
+    {
+        return $this->discipline;
+    }
+
+    public function setDiscipline(string $discipline): self
+    {
+        $this->discipline = $discipline;
         return $this;
     }
 

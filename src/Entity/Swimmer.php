@@ -64,6 +64,9 @@ class Swimmer implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(name: "brasse", type: "integer", nullable: true)]
     private ?int $brasse = null;
 
+     #[ORM\Column(name: "bio", type: "text", nullable: true)]
+     private ?string $bio = null;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -190,7 +193,6 @@ class Swimmer implements UserInterface, PasswordAuthenticatedUserInterface
         return $this;
     }
 
-    // Getters et setters pour les nouveaux champs
     public function getLevel(): ?int
     {
         return $this->level;
@@ -253,5 +255,16 @@ class Swimmer implements UserInterface, PasswordAuthenticatedUserInterface
     public function getUserIdentifier(): string
     {
         return $this->email;
+    }
+
+    public function getBio(): ?string
+    {
+        return $this->bio;
+    }
+
+    public function setBio(?string $bio): self
+    {
+        $this->bio = $bio;
+        return $this;
     }
 }

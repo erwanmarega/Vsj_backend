@@ -210,51 +210,87 @@ public function assignGroupsToCoach(Request $request, EntityManagerInterface $en
     ], Response::HTTP_OK);
 }
 
-#[Route('/admin/create-training', name: 'admin_create_training', methods: ['POST'])]
-    #[IsGranted('ROLE_ADMIN')]
-    public function createTraining(
-        Request $request, 
-        EntityManagerInterface $entityManager
-    ): Response {
-        $data = json_decode($request->getContent(), true);
+#[Route('/admin/create-trainings', name: 'admin_create_trainings', methods: ['POST'])]
+#[IsGranted('ROLE_ADMIN')]
+public function createRecurringTrainings(
+    Request $request, 
+    EntityManagerInterface $entityManager
+): Response {
+    $data = json_decode($request->getContent(), true);
 
-        if (!isset($data['title'], $data['dateTraining'], $data['durationTraining'], $data['intensityTraining'], $data['categoryTraining'], $data['groupId'])) {
-            return $this->json(['error' => 'Données incomplètes'], Response::HTTP_BAD_REQUEST);
-        }
-
-        $group = $entityManager->getRepository(Groups::class)->find($data['groupId']);
-        if (!$group) {
-            return $this->json(['error' => 'Groupe introuvable'], Response::HTTP_NOT_FOUND);
-        }
-
-        $training = new Training();
-        $training->setTitle($data['title']);
-        $training->setDateTraining(new \DateTime($data['dateTraining']));
-        $training->setDurationTraining($data['durationTraining']);
-        $training->setIntensityTraining($data['intensityTraining']);
-        $training->setCategoryTraining($data['categoryTraining']);
-        $training->setDescriptionTraining($data['description'] ?? null);
-        $training->setIsDefinedTraining($data['isDefinedTraining'] ?? false);
-        $training->setGroup($group);
-
-        $entityManager->persist($training);
-        $entityManager->flush();
-
-        return $this->json([
-            'message' => 'Entraînement créé avec succès !',
-            'training' => [
-                'id' => $training->getId(),
-                'title' => $training->getTitle(),
-                'dateTraining' => $training->getDateTraining()->format('Y-m-d H:i:s'),
-                'duration' => $training->getDurationTraining(),
-                'intensity' => $training->getIntensityTraining(),
-                'category' => $training->getCategoryTraining(),
-                'description' => $training->getDescriptionTraining(),
-                'isDefined' => $training->isIsDefinedTraining(),
-                'group' => $group->getName(),
-            ],
-        ], Response::HTTP_CREATED);
+    if (!isset($data['title'], $data['durationTraining'], $data['intensityTraining'], $data['categoryTraining'], $data['groupId'])) {
+        return $this->json(['error' => 'Données incomplètes'], Response::HTTP_BAD_REQUEST);
     }
+
+    $group = $entityManager->getRepository(Groups::class)->find($data['groupId']);
+    if (!$group) {
+        return $this->json(['error' => 'Groupe introuvable'], Response::HTTP_NOT_FOUND);
+    }
+
+    $schedules = [
+        1 => [['day' => 'Saturday', 'time' => '11:30', 'duration' => 70]], 
+        2 => [['day' => 'Saturday', 'time' => '12:40', 'duration' => 40]], 
+        3 => [
+            ['day' => 'Monday', 'time' => '18:30', 'duration' => 60], 
+            ['day' => 'Wednesday', 'time' => '09:45', 'duration' => 60], 
+            ['day' => 'Wednesday', 'time' => '18:30', 'duration' => 60]
+        ], 
+        4 => [['day' => 'Saturday', 'time' => '10:00', 'duration' => 120]], 
+        5 => [
+            ['day' => 'Friday', 'time' => '21:00', 'duration' => 60],
+            ['day' => 'Saturday', 'time' => '09:00', 'duration' => 60]
+        ], 
+        6 => [
+            ['day' => 'Monday', 'time' => '20:15', 'duration' => 45], 
+            ['day' => 'Wednesday', 'time' => '19:30', 'duration' => 45]
+        ], 
+        7 => [['day' => 'Monday', 'time' => '21:00', 'duration' => 40]] 
+    ];
+
+    if (!isset($schedules[$data['groupId']])) {
+        return $this->json(['error' => 'Aucun horaire défini pour ce groupe'], Response::HTTP_BAD_REQUEST);
+    }
+
+    $trainings = [];
+    $today = new \DateTime();
+    $endDate = (clone $today)->modify('+3 months'); 
+
+    foreach ($schedules[$data['groupId']] as $schedule) {
+        $currentDate = clone $today;
+        $currentDate->modify('next ' . $schedule['day']);
+        $currentDate->setTime((int)explode(':', $schedule['time'])[0], (int)explode(':', $schedule['time'])[1]);
+
+        while ($currentDate <= $endDate) {
+            $training = new Training();
+            $training->setTitle($data['title']);
+            $training->setDateTraining(clone $currentDate);
+            $training->setDurationTraining($schedule['duration']);
+            $training->setIntensityTraining($data['intensityTraining']);
+            $training->setCategoryTraining($data['categoryTraining']);
+            $training->setDescriptionTraining($data['description'] ?? null);
+            $training->setIsDefinedTraining(true);
+            $training->setGroup($group);
+
+            $entityManager->persist($training);
+
+            $trainings[] = [
+                'title' => $training->getTitle(),
+                'date' => $training->getDateTraining()->format('Y-m-d H:i:s'),
+                'group' => $group->getName()
+            ];
+
+            $currentDate->modify('+1 week');
+        }
+    }
+
+    $entityManager->flush();
+
+    return $this->json([
+        'message' => 'Entraînements récurrents créés avec succès !',
+        'trainings' => $trainings
+    ], Response::HTTP_CREATED);
+}
+
 
     #[Route('/admin/trainings', name: 'get_all_trainings', methods: ['GET'])]
     #[IsGranted('ROLE_ADMIN')]

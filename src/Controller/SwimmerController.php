@@ -15,6 +15,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use App\Entity\Groups;
 use App\Entity\Attendance;
 use App\Entity\Training;
+use App\Entity\Message;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 
@@ -131,6 +132,34 @@ class SwimmerController extends AbstractController
         ]);
     }
 
+
+    
+     #[Route("/api/swimmer/me", name:'get_swimmer_info', methods:['GET'])]
+    public function getSwimmerInfo(): JsonResponse
+    {
+        $user = $this->getUser();
+
+        if (!$user instanceof Swimmer) {
+            return $this->json(['message' => 'Utilisateur non authentifié'], JsonResponse::HTTP_UNAUTHORIZED);
+        }
+
+        return $this->json([
+            'id' => $user->getId(),
+            'email' => $user->getEmail(),
+            'nom' => $user->getNom(),
+            'prenom' => $user->getPrenom(),
+            'bio' => $user->getBio(),
+            'dateNaissance' => $user->getDateNaissance()?->format('Y-m-d'),
+            'adresse' => $user->getAdresse(),
+            'codePostal' => $user->getCodePostal(),
+            'ville' => $user->getVille(),
+            'telephone' => $user->getTelephone(),
+            'roles' => $user->getRoles(),
+            'groupId' => $user->getGroup() ? $user->getGroup()->getId() : null, 
+        'groupName' => $user->getGroup() ? $user->getGroup()->getName() : null, 
+        ], JsonResponse::HTTP_OK);
+    }
+
     #[Route('/swimmer/change-password', name: 'change_password', methods: ['POST'])]
     public function changePassword(Request $request): Response
     {
@@ -242,7 +271,6 @@ class SwimmerController extends AbstractController
             return $this->json(['error' => 'Données incomplètes'], Response::HTTP_BAD_REQUEST);
         }
 
-        /** @var Swimmer $swimmer */
         $swimmer = $this->getUser();
 
         $training = $entityManager->getRepository(Training::class)->find($data['trainingId']);
@@ -282,7 +310,6 @@ class SwimmerController extends AbstractController
 #[IsGranted('ROLE_USER')]
 public function getSwimmerAttendances(EntityManagerInterface $entityManager): JsonResponse
 {
-    /** @var Swimmer $swimmer */
     $swimmer = $this->getUser();
     $attendances = $entityManager->getRepository(Attendance::class)->findBy(['swimmer' => $swimmer]);
 
@@ -300,5 +327,212 @@ public function getSwimmerAttendances(EntityManagerInterface $entityManager): Js
     }
 
     return $this->json($data, Response::HTTP_OK);
+}
+
+#[Route('/api/swimmer/bio', name: 'update_swimmer_bio', methods: ['POST'])]
+public function updateSwimmerBio(Request $request): JsonResponse
+{
+    $user = $this->getUser();
+
+    if (!$user instanceof Swimmer) {
+        return $this->json(['message' => 'Utilisateur non authentifié'], JsonResponse::HTTP_UNAUTHORIZED);
+    }
+
+    $data = json_decode($request->getContent(), true);
+
+    if (empty($data['bio'])) {
+        return $this->json(['message' => 'La bio est requise'], JsonResponse::HTTP_BAD_REQUEST);
+    }
+
+    $user->setBio($data['bio']);
+    $this->entityManager->persist($user);
+    $this->entityManager->flush();
+
+    return $this->json([
+        'message' => 'Bio mise à jour avec succès',
+        'bio' => $user->getBio(),
+    ], JsonResponse::HTTP_OK);
+}
+
+#[Route('/api/group/{groupId}/trainings', name: 'get_group_trainings', methods: ['GET'])]
+public function getGroupTrainings(int $groupId, Request $request, EntityManagerInterface $entityManager): JsonResponse
+{
+    $group = $entityManager->getRepository(Groups::class)->find($groupId);
+
+    if (!$group) {
+        return $this->json(['error' => 'Groupe non trouvé'], Response::HTTP_NOT_FOUND);
+    }
+
+    $startOfMonth = new \DateTime('first day of this month 00:00:00');
+    $endOfMonth = new \DateTime('last day of this month 23:59:59');
+
+    $month = $request->query->get('month'); 
+    if ($month) {
+        $startOfMonth = new \DateTime("first day of $month");
+        $endOfMonth = new \DateTime("last day of $month 23:59:59");
+    }
+
+    $trainings = $entityManager->getRepository(Training::class)->createQueryBuilder('t')
+        ->where('t.group = :group')
+        ->andWhere('t.dateTraining BETWEEN :start AND :end')
+        ->setParameter('group', $group)
+        ->setParameter('start', $startOfMonth)
+        ->setParameter('end', $endOfMonth)
+        ->orderBy('t.dateTraining', 'ASC')
+        ->getQuery()
+        ->getResult();
+
+    $trainingData = array_map(function ($training) {
+        return [
+            'id' => $training->getId(),
+            'title' => $training->getTitle(),
+            'date' => $training->getDateTraining()->format('Y-m-d H:i'),
+            'duration' => $training->getDurationTraining(),
+            'intensity' => $training->getIntensityTraining(),
+            'category' => $training->getCategoryTraining(),
+            'description' => $training->getDescriptionTraining(),
+        ];
+    }, $trainings);
+
+    return $this->json([
+        'message' => 'Entraînements récupérés avec succès',
+        'group' => $group->getName(),
+        'trainings' => $trainingData
+    ], Response::HTTP_OK);
+}
+
+#[Route("/api/swimmer/conversations", name: "get_swimmer_conversations", methods: ["GET"])]
+public function getSwimmerConversations(EntityManagerInterface $entityManager): JsonResponse
+{
+    $user = $this->getUser();
+
+    if (!$user instanceof Swimmer) {
+        return $this->json(['message' => 'Utilisateur non authentifié'], JsonResponse::HTTP_UNAUTHORIZED);
+    }
+
+    $query = $entityManager->createQuery(
+        'SELECT m
+         FROM App\Entity\Message m
+         WHERE m.createdAt = (
+             SELECT MAX(m2.createdAt)
+             FROM App\Entity\Message m2
+             WHERE (m2.sender = m.sender AND m2.receiver = m.receiver)
+                OR (m2.sender = m.receiver AND m2.receiver = m.sender)
+         )
+         AND (m.sender = :user OR m.receiver = :user)
+         ORDER BY m.createdAt DESC'
+    )->setParameter('user', $user);
+
+    $lastMessages = $query->getResult();
+    
+    $conversations = [];
+    
+    foreach ($lastMessages as $message) {
+        $contact = $message->getSender() === $user ? $message->getReceiver() : $message->getSender();
+        $contactId = $contact->getId();
+
+        if (!isset($conversations[$contactId])) {
+            $prenom = $contact->getPrenom() ?? '';
+            $nom = $contact->getNom() ?? '';
+            $name = trim($prenom . ' ' . $nom) ?: $contact->getEmail(); 
+
+            $conversations[$contactId] = [
+                'id' => $contactId,
+                'name' => $name,
+                'lastMessage' => $message->getContent(),
+                'date' => $message->getCreatedAt()->format(\DateTime::ATOM),
+                'avatar' => '/assets/icons/Avatar03.png',
+            ];
+        }
+    }
+
+    return $this->json(array_values($conversations));
+}
+
+
+    #[Route("/api/messages", name: "get_messages", methods: ["GET"])]
+    public function getMessages(Request $request, EntityManagerInterface $entityManager): JsonResponse
+    {
+        $user = $this->getUser();
+        $recipientId = $request->query->get('recipientId');
+
+        if (!$user instanceof Swimmer) {
+            return $this->json(['message' => 'Utilisateur non authentifié'], JsonResponse::HTTP_UNAUTHORIZED);
+        }
+
+        if (!$recipientId) {
+            return $this->json(['message' => 'ID du destinataire requis'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $recipient = $entityManager->getRepository(Swimmer::class)->find($recipientId);
+        if (!$recipient) {
+            return $this->json(['message' => 'Destinataire non trouvé'], Response::HTTP_NOT_FOUND);
+        }
+
+        $messages = $entityManager->getRepository(Message::class)->findBy(
+            [
+                'sender' => [$user, $recipient],
+                'receiver' => [$user, $recipient]
+            ],
+            ['createdAt' => 'ASC']
+        );
+
+        $data = array_map(function (Message $msg) use ($user) {
+            return [
+                'id' => $msg->getId(),
+                'senderId' => $msg->getSender()->getId(),
+                'content' => $msg->getContent(),
+                'timestamp' => $msg->getCreatedAt()->format(\DateTime::ATOM),
+                'isMine' => $msg->getSender() === $user,
+            ];
+        }, $messages);
+
+        return $this->json($data, Response::HTTP_OK);
+    }
+
+    #[Route("/api/messages", name: "send_message", methods: ["POST"])]
+public function sendMessage(Request $request, EntityManagerInterface $entityManager): JsonResponse
+{
+    try {
+        $user = $this->getUser();
+        $data = json_decode($request->getContent(), true);
+        $recipientId = $data['recipientId'] ?? null;
+        $content = $data['content'] ?? null;
+
+        if (!$user instanceof Swimmer) {
+            return $this->json(['message' => 'Utilisateur non authentifié'], JsonResponse::HTTP_UNAUTHORIZED);
+        }
+
+        if (!$recipientId || !$content) {
+            return $this->json(['message' => 'ID du destinataire et contenu requis'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $recipient = $entityManager->getRepository(Swimmer::class)->find($recipientId);
+        if (!$recipient) {
+            return $this->json(['message' => 'Destinataire non trouvé'], Response::HTTP_NOT_FOUND);
+        }
+
+        $message = new Message();
+        $message->setSender($user);
+        $message->setReceiver($recipient);
+        $message->setContent($content);
+        $message->setCreatedAt(new \DateTime());
+
+        $entityManager->persist($message);
+        $entityManager->flush();
+
+        return $this->json([
+            'id' => $message->getId(),
+            'senderId' => $user->getId(),
+            'content' => $message->getContent(),
+            'timestamp' => $message->getCreatedAt()->format(\DateTime::ATOM),
+            'isMine' => true,
+        ], Response::HTTP_CREATED);
+    } catch (\Exception $e) {
+        return $this->json(
+            ['message' => 'Erreur interne du serveur', 'details' => $e->getMessage()],
+            Response::HTTP_INTERNAL_SERVER_ERROR
+        );
+    }
 }
 }

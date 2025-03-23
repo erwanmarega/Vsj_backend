@@ -27,7 +27,7 @@ class Message
     #[ORM\Column(name: "created_at", type: "datetime")]
     private ?\DateTimeInterface $createdAt = null;
 
-    #[ORM\Column(name: "subject", type: "string", length: 255)]
+    #[ORM\Column(name: "subject", type: "string", length: 255, nullable: true)]
     private ?string $subject = null;
 
     public function getId(): ?int
